@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>YB Craft | The Artisanal Shop</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+    <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700;800&family=Playfair+Display:ital,wght@0,700;0,900;1,700&display=swap" rel="stylesheet">
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, onValue, push, remove, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBaCTU_JPXQjLP2N0zP1YYa2bRZiVh1FPY",
+            authDomain: "gippyes-studio.firebaseapp.com",
+            databaseURL: "https://gippyes-studio-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "gippyes-studio",
+            storageBucket: "gippyes-studio.firebasestorage.app",
+        };
+
+        const app = initializeApp(firebaseConfig);
+        window.db = getDatabase(app);
+        window.f_ops = { ref, onValue, push, remove, update };
+        window.dbReady = true;
+    </script>
+
+    <style>
+        :root { --accent: #BB6F5E; --deep: #4A2C2A; --cream: #F5EFE6; }
+        body { font-family: 'Sora', sans-serif; background: var(--cream); color: var(--deep); -webkit-tap-highlight-color: transparent; overflow-x: hidden; }
+        .font-display { font-family: 'Playfair Display', serif; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        
+        /* PERFECT ROUND LOGO & BRANDING */
+        .logo-circle {
+            width: 44px; height: 44px; 
+            border-radius: 50%;
+            overflow: hidden;
+            display: flex; align-items: center; justify-content: center;
+            border: 1.5px solid rgba(74, 44, 42, 0.12);
+            background: white;
+            flex-shrink: 0;
+        }
+        .logo-img { height: 100%; width: 100%; object-fit: cover; transform: scale(1.4); }
+
+        /* RETAIL UI */
+        .buy-bar { position: fixed; bottom: 0; left: 0; right: 0; background: white; padding: 14px 24px; display: flex; gap: 12px; border-top: 1px solid rgba(0,0,0,0.05); z-index: 100; box-shadow: 0 -10px 40px rgba(0,0,0,0.03); }
+        .img-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(0,0,0,0.1); transition: 0.3s; }
+        .img-dot.active { width: 18px; background: var(--accent); border-radius: 10px; }
+
+        input, textarea, select { background: #fdfdfd !important; border: 1px solid rgba(74, 44, 42, 0.1) !important; padding: 14px !important; border-radius: 14px !important; font-size: 13px !important; width: 100%; outline: none; color: var(--deep) !important; }
+        .category-pill { padding: 8px 24px; border-radius: 50px; font-size: 10px; font-weight: 800; border: 1px solid rgba(74, 44, 42, 0.1); cursor: pointer; transition: 0.3s; white-space: nowrap; text-transform: uppercase; letter-spacing: 0.05em; }
+        .category-pill.active { background: var(--deep); color: #fff; }
+        
+        .status-pill { font-size: 8px; font-weight: 800; padding: 4px 10px; border-radius: 100px; text-transform: uppercase; position: absolute; top: 12px; left: 12px; z-index: 10; }
+        .st-sold { background: #fee2e2; color: #991b1b; }
+        .st-soon { background: #fef9c3; color: #854d0e; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        const { motion, AnimatePresence } = window.Motion;
+
+        // Functional SVG Stars
+        const Star = ({ filled, onClick, size = "16px" }) => (
+            <svg 
+                onClick={onClick}
+                viewBox="0 0 24 24" 
+                style={{ width: size, height: size, cursor: onClick ? 'pointer' : 'default', fill: filled ? '#FFD700' : '#E5E7EB', transition: '0.2s' }}
+            >
+                <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+            </svg>
+        );
+
+        function App() {
+            const [isReady, setIsReady] = useState(false);
+            const [page, setPage] = useState('home');
+            const [products, setProducts] = useState([]);
+            const [categories, setCategories] = useState([]);
+            const [reviews, setReviews] = useState([]);
+            const [cart, setCart] = useState([]);
+            const [filter, setFilter] = useState('All');
+            const [selectedProduct, setSelectedProduct] = useState(null);
+            const [isAdmin, setIsAdmin] = useState(false);
+            const [editTarget, setEditTarget] = useState(null);
+            const [showCheckout, setShowCheckout] = useState(false);
+            const [activeImg, setActiveImg] = useState(0);
+            const [revStar, setRevStar] = useState(5);
+            
+            const [custName, setCustName] = useState("");
+            const [custNum, setCustNum] = useState("");
+            const [custAdd, setCustAdd] = useState("");
+
+            useEffect(() => {
+                const interval = setInterval(() => {
+                    if (window.dbReady && window.db && window.f_ops) {
+                        setIsReady(true);
+                        window.f_ops.onValue(window.f_ops.ref(window.db, 'yb_products'), (snap) => {
+                            const data = snap.val();
+                            setProducts(data ? Object.keys(data).map(k => ({ id: k, ...data[k] })) : []);
+                        });
+                        window.f_ops.onValue(window.f_ops.ref(window.db, 'yb_categories'), (snap) => {
+                            const data = snap.val();
+                            setCategories(data ? Object.keys(data).map(k => ({ id: k, name: data[k] })) : []);
+                        });
+                        window.f_ops.onValue(window.f_ops.ref(window.db, 'yb_reviews'), (snap) => {
+                            const data = snap.val();
+                            setReviews(data ? Object.keys(data).map(k => ({ id: k, ...data[k] })) : []);
+                        });
+                        clearInterval(interval);
+                    }
+                }, 500);
+            }, []);
+
+            useEffect(() => { if(isReady) lucide.createIcons(); }, [isReady, page, selectedProduct, isAdmin]);
+
+            const handleCheckoutFinal = () => {
+                if (!custName || !custNum || !custAdd) return alert("Fill all details");
+                const currentItems = cart.length > 0 ? cart : [selectedProduct];
+                const total = currentItems.reduce((s,i)=>s+i.price, 0);
+                const itemsList = currentItems.map(i => `• ${i.name} (Rs.${i.price})`).join('%0A');
+                const waMessage = `🧶 *New Order: YB Craft*%0A👤 *Name:* ${custName}%0A📍 *Addr:* ${custAdd}%0A📱 *Ph:* ${custNum}%0A📦 *Order:*%0A${itemsList}%0A💰 *Total:* Rs.${total}`;
+                window.location.href = `upi://pay?pa=7041825066@ybl&pn=YB_Craft&am=${total}&cu=INR`;
+                setTimeout(() => window.open(`https://wa.me/917041825066?text=${waMessage}`), 3000);
+            };
+
+            if (!isReady) return <div className="h-screen w-screen flex items-center justify-center bg-[#F5EFE6]"><div className="w-10 h-10 border-4 border-[#4A2C2A] border-t-transparent rounded-full animate-spin"></div></div>;
+
+            return (
+                <div className="min-h-screen">
+                    <nav className="fixed top-0 w-full z-[100] px-6 py-4 flex justify-between items-center bg-white/80 backdrop-blur-xl border-b border-black/5">
+                        <div onClick={() => {setPage('home'); window.scrollTo(0,0);}} className="cursor-pointer flex items-center gap-3">
+                            <div className="logo-circle"><img src="https://cdn.phototourl.com/free/2026-04-12-5e9e6bfa-1480-4bc9-a8fb-5d1de77814fc.png" className="logo-img" /></div>
+                            <h1 className="font-display text-xl font-bold uppercase tracking-tighter italic">YB Craft</h1>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <div onClick={() => setPage('cart')} className="relative p-2.5 bg-black/5 rounded-full cursor-pointer">
+                                <i data-lucide="shopping-bag" className="w-5 h-5"></i>
+                                {cart.length > 0 && <span className="absolute -top-1 -right-1 bg-[#BB6F5E] text-white text-[9px] w-5 h-5 rounded-full flex items-center justify-center font-bold">{cart.length}</span>}
+                            </div>
+                        </div>
+                    </nav>
+
+                    <main className="pt-20">
+                        {page === 'home' && (
+                            <motion.div initial={{opacity:0}} animate={{opacity:1}}>
+                                <section className="px-5 mb-8">
+                                    <div className="relative min-h-[350px] rounded-[30px] overflow-hidden bg-[#4A2C2A] flex items-center p-8 shadow-xl">
+                                        <div className="relative z-10 max-w-[220px]">
+                                            <span className="text-[#BB6F5E] font-bold text-[8px] tracking-widest uppercase mb-2 block font-sans">Handmade Originals</span>
+                                            <h2 className="text-white text-4xl font-display font-bold leading-tight italic">Tactile <br/> Minimal</h2>
+                                            <button onClick={()=>document.getElementById('shop').scrollIntoView({behavior:'smooth'})} className="mt-6 px-8 py-3.5 bg-white text-[#4A2C2A] rounded-full font-black text-[10px] uppercase tracking-widest shadow-lg">Shop Now</button>
+                                        </div>
+                                        <img src="https://cdn.phototourl.com/free/2026-04-12-b718c673-becb-4b17-9772-0699a7f9b8d2.png" className="absolute top-0 right-0 h-full w-full object-cover opacity-40 grayscale" />
+                                    </div>
+                                </section>
+
+                                <div id="shop" className="px-6 flex gap-2 overflow-x-auto no-scrollbar mb-8">
+                                    <div onClick={() => setFilter('All')} className={`category-pill ${filter === 'All' ? 'active' : ''}`}>All</div>
+                                    {categories.map(c => <div key={c.id} onClick={() => setFilter(c.name)} className={`category-pill ${filter === c.name ? 'active' : ''}`}>{c.name}</div>)}
+                                </div>
+
+                                <div className="px-6 grid grid-cols-2 md:grid-cols-4 gap-4 pb-20 max-w-7xl mx-auto">
+                                    {products.filter(p => filter === 'All' || p.category === filter).map(p => (
+                                        <div key={p.id} onClick={() => { setSelectedProduct(p); setPage('details'); setActiveImg(0); window.scrollTo(0,0); }} className="cursor-pointer group">
+                                            <div className="aspect-[4/5] rounded-2xl overflow-hidden mb-3 bg-white relative border border-black/5 shadow-sm">
+                                                <img src={(p.images || "").split(',')[0].trim() || "https://placehold.co/400x500"} className="w-full h-full object-cover group-hover:scale-110 transition duration-700" />
+                                                {p.status && p.status !== 'available' && <span className={`status-pill st-${p.status}`}>{p.status}</span>}
+                                                <div className="absolute bottom-2 right-2 bg-black/70 backdrop-blur-md px-2 py-1 rounded-md text-white font-black text-[9px]">Rs. {p.price}</div>
+                                            </div>
+                                            <h3 className="font-bold text-[10px] uppercase opacity-60 truncate px-1">{p.name}</h3>
+                                        </div>
+                                    ))}
+                                </div>
+                            </motion.div>
+                        )}
+
+                        {page === 'details' && selectedProduct && (
+                            <motion.div initial={{opacity:0}} animate={{opacity:1}} className="pb-32 bg-white">
+                                <div className="relative w-full bg-gray-50 border-b border-black/5">
+                                    <div className="flex overflow-x-auto snap-x snap-mandatory no-scrollbar" onScroll={(e)=>{ setActiveImg(Math.round(e.target.scrollLeft / window.innerWidth)); }}>
+                                        {(selectedProduct.images || "").split(',').map((img, i) => (
+                                            <div key={i} className="w-screen flex-shrink-0 snap-center p-6 flex items-center justify-center h-[60vh]">
+                                                <img src={img.trim()} className="max-h-full object-contain rounded-xl shadow-lg" />
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="flex justify-center gap-1.5 pb-6">{(selectedProduct.images || "").split(',').map((_, i) => <div key={i} className={`img-dot ${activeImg === i ? 'active' : ''}`}></div>)}</div>
+                                    <button onClick={()=>setPage('home')} className="absolute top-4 left-4 p-2.5 bg-white shadow-lg rounded-full"><i data-lucide="arrow-left" className="w-4 h-4"></i></button>
+                                </div>
+
+                                <div className="px-6 py-8 max-w-2xl mx-auto">
+                                    <span className="text-[#BB6F5E] font-bold text-[8px] tracking-widest uppercase">{selectedProduct.category}</span>
+                                    <h2 className="text-3xl font-display font-bold italic text-deep mt-1 leading-tight uppercase tracking-tighter">{selectedProduct.name}</h2>
+                                    <div className="text-3xl font-black text-[#4A2C2A] mt-4">Rs. {selectedProduct.price}</div>
+                                    <p className="mt-8 text-sm opacity-50 leading-relaxed font-medium">{selectedProduct.desc || "Artisanal handmade quality created with passion."}</p>
+
+                                    <div className="mt-12 bg-gray-50 p-6 rounded-[24px]">
+                                        <h4 className="text-[10px] font-black uppercase mb-6 tracking-widest text-center">Reviews ({reviews.filter(r=>r.productId===selectedProduct.id).length})</h4>
+                                        <div className="space-y-4 mb-10">
+                                            {reviews.filter(r=>r.productId===selectedProduct.id).map((r, i) => (
+                                                <div key={i} className="p-4 bg-white rounded-xl shadow-sm border border-black/5">
+                                                    <div className="flex justify-between items-center mb-1"><span className="font-bold text-[10px] uppercase opacity-40">{r.name}</span><div className="flex gap-0.5">{[...Array(5)].map((_,s)=><Star key={s} filled={s < r.rating} size="10px" />)}</div></div>
+                                                    <p className="text-[11px] opacity-60 italic">"{r.msg}"</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <div className="space-y-4 pt-6 border-t border-black/5">
+                                            <p className="text-[9px] font-bold opacity-30 uppercase text-center">Rate this craft</p>
+                                            <div className="flex justify-center gap-3 mb-4">{[1,2,3,4,5].map(s => <Star key={s} filled={s <= revStar} onClick={()=>setRevStar(s)} size="24px" />)}</div>
+                                            <input id="rn" placeholder="Name" /><textarea id="rm" placeholder="Your Thoughts..." className="h-20" />
+                                            <button onClick={()=>{
+                                                const n = document.getElementById('rn').value; const m = document.getElementById('rm').value;
+                                                if(n && m) { window.f_ops.push(window.f_ops.ref(window.db, 'yb_reviews'), { productId: selectedProduct.id, name:n, msg:m, rating:revStar, date: new Date().toLocaleDateString() }); alert("Review Posted!"); }
+                                            }} className="w-full py-4 bg-[#4A2C2A] text-white rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg">Publish Review</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="buy-bar">
+                                    <button onClick={()=>{setCart([...cart, selectedProduct]); alert("Added!")}} className="flex-1 py-4 border border-[#4A2C2A] text-[#4A2C2A] rounded-xl font-bold text-[10px] uppercase active:scale-95 transition">To Bag</button>
+                                    <button onClick={()=>setShowCheckout(true)} className="flex-[2.2] py-4 bg-[#4A2C2A] text-white rounded-xl font-bold text-[10px] uppercase shadow-lg active:scale-95 transition">Direct Order</button>
+                                </div>
+                            </motion.div>
+                        )}
+
+                        {page === 'cart' && (
+                            <motion.div initial={{opacity:0}} className="px-6 py-10 max-w-xl mx-auto min-h-[60vh]">
+                                <h2 className="text-3xl font-black mb-8 italic tracking-tighter text-center uppercase font-display">Bag</h2>
+                                {cart.length === 0 ? <div className="py-20 text-center border-2 border-dashed rounded-2xl opacity-10 uppercase font-black text-xs font-sans">Empty Bag</div> : (
+                                    <div className="space-y-4">
+                                        <div className="bg-white p-5 rounded-2xl space-y-4 border border-black/5 shadow-sm">
+                                            {cart.map((item, idx) => (
+                                                <div key={idx} className="flex justify-between items-center border-b border-black/5 pb-3 last:border-0 last:pb-0">
+                                                    <div className="flex items-center gap-3"><img src={(item.images || "").split(',')[0]} className="w-12 h-12 rounded-lg object-cover" /><div><p className="font-bold text-[11px] uppercase">{item.name}</p><p className="text-[10px] font-black text-[#BB6F5E]">Rs. {item.price}</p></div></div>
+                                                    <button onClick={()=>setCart(cart.filter((_,i)=>i!==idx))} className="text-red-400 p-2"><i data-lucide="trash-2" className="w-4 h-4"></i></button>
+                                                </div>
+                                            ))}
+                                            <div className="flex justify-between pt-3 font-black text-lg text-deep"><span>Total</span><span>Rs. {cart.reduce((s,i)=>s+i.price,0)}</span></div>
+                                        </div>
+                                        <button onClick={()=>setShowCheckout(true)} className="w-full py-5 bg-[#4A2C2A] text-white rounded-full font-black text-xs uppercase shadow-xl tracking-widest">Complete Checkout</button>
+                                    </div>
+                                )}
+                            </motion.div>
+                        )}
+
+                        {page === 'admin' && (
+                            <div className="max-w-6xl mx-auto px-6 py-10">
+                                {!isAdmin ? (
+                                    <div className="bg-white p-10 rounded-[32px] text-center shadow-2xl max-w-sm mx-auto">
+                                        <input type="password" placeholder="Passcode" id="ap" className="mb-4 text-center" />
+                                        <button onClick={() => document.getElementById('ap').value === 'yb123' ? setIsAdmin(true) : alert("Wrong")} className="w-full py-4 bg-[#4A2C2A] text-white rounded-xl font-bold uppercase tracking-widest text-[10px]">Verify</button>
+                                    </div>
+                                ) : (
+                                    <div className="grid md:grid-cols-3 gap-10">
+                                        <div className="space-y-4">
+                                            <h3 className="font-black uppercase tracking-widest text-[10px] opacity-30 text-center">Sections</h3>
+                                            <button onClick={()=>window.f_ops.push(window.f_ops.ref(window.db, 'yb_categories'), prompt("Category?"))} className="w-full py-3 bg-black text-white rounded-xl font-bold">+ New Category</button>
+                                            {categories.map(c => <div key={c.id} className="bg-white p-4 rounded-xl flex justify-between items-center shadow-sm border border-black/5 text-[11px] font-bold"><span>{c.name}</span><button onClick={()=>window.f_ops.remove(window.f_ops.ref(window.db, `yb_categories/${c.id}`))}><i data-lucide="x" className="w-4 h-4 text-red-400"></i></button></div>)}
+                                        </div>
+                                        <div className="space-y-4">
+                                            <h3 className="font-black uppercase tracking-widest text-[10px] opacity-30 text-center">Inventory</h3>
+                                            <button onClick={()=>setEditTarget({ name:'', price:'', images:'', category:'', status:'available', desc:'' })} className="w-full py-3 bg-[#BB6F5E] text-white rounded-xl font-bold">+ Add Product</button>
+                                            <div className="space-y-2 max-h-[600px] overflow-y-auto no-scrollbar">{products.map(p => <div key={p.id} className="bg-white p-3 rounded-xl flex justify-between items-center border border-black/5 shadow-sm text-xs font-bold truncate pr-4"><span>{p.name}</span><div className="flex gap-2 shrink-0"><button onClick={()=>setEditTarget(p)} className="p-2 bg-blue-50 text-blue-500 rounded-lg"><i data-lucide="edit-3" className="w-3 h-3"></i></button><button onClick={()=>window.f_ops.remove(window.f_ops.ref(window.db, `yb_products/${p.id}`))} className="p-2 bg-red-50 text-red-400 rounded-lg"><i data-lucide="trash-2" className="w-3 h-3"></i></button></div></div>)}</div>
+                                        </div>
+                                        <div className="space-y-4">
+                                            <h3 className="font-black uppercase tracking-widest text-[10px] opacity-30 text-center">Reviews</h3>
+                                            <div className="space-y-2 max-h-[600px] overflow-y-auto no-scrollbar">
+                                                {reviews.map(r => (
+                                                    <div key={r.id} className="bg-white p-3 rounded-xl shadow-sm border border-black/5 text-[9px] leading-tight relative">
+                                                        <div className="flex justify-between mb-1"><span className="font-bold">{r.name} ({r.rating}★)</span><button onClick={()=>window.f_ops.remove(window.f_ops.ref(window.db, `yb_reviews/${r.id}`))} className="text-red-500 font-black">DEL</button></div>
+                                                        <p className="opacity-40">{r.msg}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <button onClick={()=>setIsAdmin(false)} className="md:col-span-3 py-4 opacity-20 uppercase font-black text-[9px] tracking-widest">End Admin Session</button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </main>
+
+                    <AnimatePresence>
+                        {showCheckout && (
+                            <div className="fixed inset-0 z-[1000] flex items-end">
+                                <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} onClick={()=>setShowCheckout(false)} className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+                                <motion.div initial={{y:'100%'}} animate={{y:0}} exit={{y:'100%'}} className="relative bg-[#F5EFE6] w-full p-8 rounded-t-[32px] space-y-4">
+                                    <h3 className="text-2xl font-black tracking-tighter">Shipping Info</h3>
+                                    <input placeholder="Full Name" onChange={e=>setCustName(e.target.value)} /><input placeholder="WhatsApp Number" onChange={e=>setCustNum(e.target.value)} /><textarea placeholder="Shipping Address" className="h-24" onChange={e=>setCustAdd(e.target.value)} />
+                                    <button onClick={handleCheckoutFinal} className="w-full py-5 bg-[#4A2C2A] text-white rounded-full font-black text-xs uppercase shadow-xl tracking-widest">Pay & Confirm</button>
+                                </motion.div>
+                            </div>
+                        )}
+                    </AnimatePresence>
+
+                    <AnimatePresence>
+                        {editTarget && (
+                            <div className="fixed inset-0 z-[1200] flex items-center justify-center p-6">
+                                <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} onClick={()=>setEditTarget(null)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+                                <motion.form onSubmit={(e)=>{
+                                    e.preventDefault(); const fd = new FormData(e.target);
+                                    const d = { name:fd.get('n'), price:Number(fd.get('p')), images:fd.get('i'), category:fd.get('c'), status:fd.get('s'), desc:fd.get('d') };
+                                    editTarget.id ? window.f_ops.update(window.f_ops.ref(window.db, `yb_products/${editTarget.id}`), d) : window.f_ops.push(window.f_ops.ref(window.db, 'yb_products'), d);
+                                    setEditTarget(null);
+                                }} className="relative bg-white w-full max-w-lg p-8 rounded-[32px] space-y-4 shadow-2xl">
+                                    <h4 className="font-bold text-xs uppercase tracking-widest opacity-30 font-sans">Editor</h4>
+                                    <div className="grid grid-cols-2 gap-4 font-sans"><input name="n" defaultValue={editTarget.name} placeholder="Name" required /><input name="p" defaultValue={editTarget.price} placeholder="Price" required /></div>
+                                    <input name="c" className="font-sans" defaultValue={editTarget.category} placeholder="Category" /><select name="s" defaultValue={editTarget.status} className="p-4 rounded-xl border w-full text-xs font-bold"><option value="available">Available</option><option value="sold">Sold Out</option><option value="soon">Soon</option></select>
+                                    <textarea name="i" defaultValue={editTarget.images} placeholder="Image URLs (commas)" required /><textarea name="d" defaultValue={editTarget.desc} placeholder="Desc" className="h-16" />
+                                    <button className="w-full py-4 bg-deep text-white rounded-2xl font-bold uppercase text-[10px] tracking-widest">Apply Changes</button>
+                                </motion.form>
+                            </div>
+                        )}
+                    </AnimatePresence>
+
+                    <footer className="py-20 text-center border-t border-black/5 bg-[#F5EFE6] opacity-40">
+                        <p className="font-display font-bold italic mb-6 text-[11px] tracking-widest uppercase">Handmade with love & purpose</p>
+                        <div className="flex justify-center gap-10 text-[9px] font-black uppercase tracking-widest">
+                            <a href="#" onClick={()=> {setPage('admin'); window.scrollTo(0,0);}}>Console</a>
+                            <a href="https://www.instagram.com/yb_craft_?igsh=MXdxdnZ0Y3Z1MXRuYQ==" target="_blank">Instagram</a>
+                        </div>
+                        <p className="mt-12 text-[8px] font-bold tracking-widest uppercase">© 2025 ABHI DESIGNS__</p>
+                    </footer>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
